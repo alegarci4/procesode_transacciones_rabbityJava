@@ -26,8 +26,15 @@ public class ProducerService {
 
             ObjectMapper mapper = new ObjectMapper();
             String mensajeJson = mapper.writeValueAsString(transaccion);
+            
+            
+           //aqui vamos a definir que si el monto es mayor a 4000
+            
+            
 
             channel.basicPublish("", nombreCola, null, mensajeJson.getBytes());
+            
+            
 
             System.out.println("Transacción enviada a cola: " + nombreCola);
 

@@ -11,65 +11,80 @@ import java.util.concurrent.TimeoutException;
 
 public class RabbitConsumer {
 
-    private static final String HOST = "localhost";
+  private static final String HOST = "localhost";
 
-    private final ObjectMapper mapper = new ObjectMapper();
-    private final TransaccionService service = new TransaccionService();
+  private final ObjectMapper mapper = new ObjectMapper();
+  private final TransaccionService service = new TransaccionService();
 
-    public void iniciar() throws IOException, TimeoutException {
+  public void iniciar() throws IOException, TimeoutException {
 
-        ConnectionFactory factory = new ConnectionFactory();
-        factory.setHost(HOST);
+      ConnectionFactory factory = new ConnectionFactory();
+      factory.setHost(HOST);
 
-        Connection connection = factory.newConnection();
-        Channel channel = connection.createChannel();
+      Connection connection = factory.newConnection();
+      Channel channel = connection.createChannel();
 
-        System.out.println("Consumer esperando transacciones...");
+      System.out.println("Consumer esperando transacciones...");
 
-        DeliverCallback deliverCallback = (consumerTag, delivery) -> {
+      // declaramos la nueva cola de rechazados
+      channel.queueDeclare("cola_rechazados", true, false, false, null);
 
-            String mensaje = new String(delivery.getBody(), StandardCharsets.UTF_8);
+      DeliverCallback deliverCallback = (consumerTag, delivery) -> {
 
-            try {
+          String mensaje = new String(delivery.getBody(), StandardCharsets.UTF_8);
 
-                Transaccion transaccion =
-                        mapper.readValue(mensaje, Transaccion.class);
-                
-                
-      //se agregan los nuevos atributos 
-                transaccion.setNombre("Mariana Garcia");
-                transaccion.setCarnet("0905-24-24315");
+          try {
 
-                
-                boolean enviado = service.enviarTransaccion(transaccion);
+              Transaccion transaccion =
+                      mapper.readValue(mensaje, Transaccion.class);
 
-                if (enviado) {
+              // validación del monto
+              if (transaccion.getMonto() > 4000) {
 
-                    channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
+                  System.out.println("idTransaccion: " + transaccion.getIdTransaccion());
+                  System.out.println("monto: " + transaccion.getMonto());
+                  System.out.println("estado: RECHAZADA");
 
-                    System.out.println("ACK enviado para transacción: "
-                            + transaccion.getIdTransaccion());
+                  channel.basicPublish("", "cola_rechazados", null, mensaje.getBytes());
 
-                } else {
+                  channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
 
-                    System.out.println("POST falló, no se confirma mensaje");
+                  return;
+              }
 
-                }
+              // se agregan los nuevos atributos
+              transaccion.setNombre("Mariana Garcia");
+              transaccion.setCarnet("0905-24-24315");
 
-            } catch (Exception e) {
+              boolean enviado = service.enviarTransaccion(transaccion);
 
-                System.out.println("Error procesando mensaje: " + e.getMessage());
+              if (enviado) {
 
-            }
-        };
+                  channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
 
-        String[] bancos = {"BANRURAL", "BAC", "GYT", "BI"};
+                  System.out.println("ACK enviado para transacción: "
+                          + transaccion.getIdTransaccion());
 
-        for (String banco : bancos) {
+              } else {
 
-            channel.basicConsume(banco, false, deliverCallback, consumerTag -> {});
+                  System.out.println("POST falló, no se confirma mensaje");
 
-            System.out.println("Escuchando cola: " + banco);
-        }
-    }
+              }
+
+          } catch (Exception e) {
+
+              System.out.println("Error procesando mensaje: " + e.getMessage());
+
+          }
+      };
+
+      String[] bancos = {"BANRURAL", "BAC", "GYT", "BI"};
+
+      for (String banco : bancos) {
+
+          channel.basicConsume(banco, false, deliverCallback, consumerTag -> {});
+
+          System.out.println("Escuchando cola: " + banco);
+      }
+  }
 }
